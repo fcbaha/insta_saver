@@ -8,7 +8,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 import yt_dlp
 import asyncio
 
-BOT_TOKEN = os.environ.get("8068187770:AAFgoNllhfi949EzgyPEz-WDyRk_u6-TGNs")
+BOT_TOKEN = '8068187770:AAFgoNllhfi949EzgyPEz-WDyRk_u6-TGNs'
+
 COOKIES_STRING = (
     "mid=Z-JcogALAAHBuU_jpo2DmCqHCKqB; "
     "datr=olziZyt4Xj82VkHmV3nmGF12; "
