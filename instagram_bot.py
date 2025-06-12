@@ -7,13 +7,11 @@ from threading import Thread
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import yt_dlp
-import asyncio
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")  # Добавь эту переменную в Render
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-COOKIES_STRING = "..."  # обрежем для читаемости
+COOKIES_STRING = "your_instagram_cookies_here"  # вставь свои cookies
 
 logging.basicConfig(filename='bot_errors.log', level=logging.ERROR)
 
@@ -44,40 +42,42 @@ after_download = [
 ]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Отправь ссылку из Instagram или просто задай вопрос!", reply_markup=ReplyKeyboardMarkup([["/help"]], resize_keyboard=True))
+    await update.message.reply_text(
+        "👋 Привет! Отправь ссылку из Instagram или просто задай вопрос!",
+        reply_markup=ReplyKeyboardMarkup([["/help"]], resize_keyboard=True)
+    )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📥 Отправь ссылку на пост или Reels из Instagram, или напиши мне что-нибудь — я попробую ответить умно ✨")
+    await update.message.reply_text(
+        "📥 Отправь ссылку на Reels из Instagram, или напиши вопрос — я постараюсь ответить ✨"
+    )
 
-async def ask_groq(prompt: str) -> str:
+async def ask_openrouter(prompt: str) -> str:
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
-    data = {
-        "model": "mixtral-8x7b-32768",
+    payload = {
+        "model": "openchat/openchat-7b:free",
         "messages": [
-            {"role": "system", "content": "Ты дружелюбный Telegram-бот."},
+            {"role": "system", "content": "Ты умный Telegram-бот, отвечай дружелюбно."},
             {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.7
+        ]
     }
+
     try:
-        response = requests.post(GROQ_URL, headers=headers, json=data, timeout=30)
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=30)
         response.raise_for_status()
-        reply = response.json()['choices'][0]['message']['content']
-        return reply.strip()
+        return response.json()['choices'][0]['message']['content'].strip()
     except Exception as e:
-        logging.error(f"Groq API error: {str(e)}")
-        return "❌ Извини, я не смог получить ответ. Попробуй позже."
+        logging.error(f"OpenRouter API error: {str(e)}")
+        return "❌ Я не смог получить ответ. Попробуй позже."
 
-async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = update.message.text.strip()
-    user_id = update.message.from_user.id
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message.text.strip()
 
-    if "instagram.com" in url:
+    if "instagram.com" in message:
         await update.message.reply_text(random.choice(before_download))
-
         try:
             ydl_opts = {
                 'outtmpl': 'insta_video.mp4',
@@ -92,7 +92,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+                ydl.download([message])
 
             if os.path.getsize("insta_video.mp4") > 50_000_000:
                 os.remove("insta_video.mp4")
@@ -101,32 +101,33 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             with open("insta_video.mp4", "rb") as f:
                 await update.message.reply_video(f)
+
             os.remove("insta_video.mp4")
             await update.message.reply_text(random.choice(after_download))
-
         except Exception as e:
             logging.error(str(e))
             await update.message.reply_text("❌ Не удалось скачать видео. Проверь ссылку или попробуй позже.")
     else:
-        reply = await ask_groq(url)
+        reply = await ask_openrouter(message)
         await update.message.reply_text(reply)
 
+# Flask для Render
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    return "✅ Бот активен и работает!"
+    return "✅ Бот работает!"
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
 
-def run():
+def run_bot():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
 if __name__ == '__main__':
     Thread(target=run_flask, daemon=True).start()
-    run()
+    run_bot()
