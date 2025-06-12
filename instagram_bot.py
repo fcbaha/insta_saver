@@ -8,10 +8,25 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import yt_dlp
 
+# Переменные окружения
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 
-COOKIES_STRING = "your_instagram_cookies_here"  # вставь свои cookies
+# Instagram cookies
+COOKIES_STRING = (
+    "mid=Z-JcogALAAHBuU_jpo2DmCqHCKqB; "
+    "datr=olziZyt4Xj82VkHmV3nmGF12; "
+    "ig_did=A1F5CBE3-F0C5-4468-875E-E5415F9A1EE9; "
+    "ig_nrcb=1; "
+    "csrftoken=ONFysLggevyniNoB0MYrIJpBnyZ1JxFi; "
+    "ds_user_id=48658772952; "
+    "wd=1536x703; "
+    "dpr=1.25; "
+    "ps_l=1; "
+    "ps_n=1; "
+    "sessionid=48658772952%3AmOjL1NHJJqKhQD%3A1%3AAYfz_-8oerdCknZnwLAi6bfNLaLx0wTDTGVuzqlnBg; "
+    "rur=\"CLN\\05448658772952\\0541781283030:01fe1e976d3a3b16d07ea873e605cd27a8228d699f815235f9aae8937a55ecf313e4fc70\""
+)
 
 logging.basicConfig(filename='bot_errors.log', level=logging.ERROR)
 
@@ -28,17 +43,17 @@ before_download = [
 
 after_download = [
     "Вот твой видос, не благодари... хотя ладно, благодари 😏",
-"Инстаграм дрожит от твоих запросов... держи 👀",
-"Ещё один клик — и ты в моих руках. Ой, то есть вот видео 😈",
-"Ты точно не агент ФБР? Ладно, держи, но я слежу за тобой 👁️",
-"Снова Reels? Да ты гуру скроллинга! 🏆",
-"Видео готово! (А теперь иди работай, а не в соцсетях сиди) 🚀",
-"Лови видос, пока инста не передумала! �",
-"Ты что, решил скачать весь инстаграм? Ну держи... 😅",
-"Опа, ещё один контент-вор... шучу, лови! 🎁",
-"Видео добыто! Теперь можешь флексить в чатиках 😎",
-"Ты так часто просишь, что скоро я начну брать подписку! 💸",
-"Готово! Но если это котики — я уже в доле 🐱"
+    "Инстаграм дрожит от твоих запросов... держи 👀",
+    "Ещё один клик — и ты в моих руках. Ой, то есть вот видео 😈",
+    "Ты точно не агент ФБР? Ладно, держи, но я слежу за тобой 👁️",
+    "Снова Reels? Да ты гуру скроллинга! 🏆",
+    "Видео готово! (А теперь иди работай, а не в соцсетях сиди) 🚀",
+    "Лови видос, пока инста не передумала!",
+    "Ты что, решил скачать весь инстаграм? Ну держи... 😅",
+    "Опа, ещё один контент-вор... шучу, лови! 🎁",
+    "Видео добыто! Теперь можешь флексить в чатиках 😎",
+    "Ты так часто просишь, что скоро я начну брать подписку! 💸",
+    "Готово! Но если это котики — я уже в доле 🐱"
 ]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -52,26 +67,27 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📥 Отправь ссылку на Reels из Instagram, или напиши вопрос — я постараюсь ответить ✨"
     )
 
-async def ask_openrouter(prompt: str) -> str:
+async def ask_deepseek(prompt: str) -> str:
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         "Content-Type": "application/json"
     }
+
     payload = {
-        "model": "openchat/openchat-7b:free",
+        "model": "deepseek-chat",
         "messages": [
-            {"role": "system", "content": "Ты умный Telegram-бот, отвечай дружелюбно."},
+            {"role": "system", "content": "Ты умный Telegram-бот, отвечай дружелюбно и понятно."},
             {"role": "user", "content": prompt}
         ]
     }
 
     try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=30)
+        response = requests.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         return response.json()['choices'][0]['message']['content'].strip()
     except Exception as e:
-        logging.error(f"OpenRouter API error: {str(e)}")
-        return "❌ Я не смог получить ответ. Попробуй позже."
+        logging.error(f"DeepSeek API error: {str(e)} | Response: {getattr(e, 'response', None)}")
+        return "❌ Я не смог получить ответ от DeepSeek. Попробуй позже."
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
@@ -108,10 +124,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.error(str(e))
             await update.message.reply_text("❌ Не удалось скачать видео. Проверь ссылку или попробуй позже.")
     else:
-        reply = await ask_openrouter(message)
+        reply = await ask_deepseek(message)
         await update.message.reply_text(reply)
 
-# Flask для Render
+# Flask-сервер для Render
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
